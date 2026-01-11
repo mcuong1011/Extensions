@@ -133,15 +133,23 @@ chrome.runtime.onMessage.addListener((action, sender, sendResponse) => {
                 status: action.status
             },
         })
+            .then(() => {
+                sendResponse({ result: { success: true } });
+            })
             .catch((error) => {
                 console.error(`Failed to save bookmark for story ${action.id}:`, error);
                 logError('storage-error', 'Failed to save bookmark', { id: action.id, error: String(error) });
+                sendResponse({ result: { success: false, error: String(error) } });
             });
     } else if (action.message === 'del-bookmark') {
         chrome.storage.local.remove(action.id)
+            .then(() => {
+                sendResponse({ result: { success: true } });
+            })
             .catch((error) => {
                 console.error(`Failed to delete bookmark for story ${action.id}:`, error);
                 logError('storage-error', 'Failed to delete bookmark', { id: action.id, error: String(error) });
+                sendResponse({ result: { success: false, error: String(error) } });
             });
     } else if (action.message === 'get-info') {
         chrome.storage.sync.get('settings')

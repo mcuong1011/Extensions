@@ -22,9 +22,13 @@ window.setupCheckboxes = () => {
                 }
 
                 // Handle checkbox changes
-                checkbox.addEventListener('click', () => {
-                    settings[checkbox.id] = checkbox.checked;
-                    chrome.storage.sync.set({ settings: settings })
+                checkbox.addEventListener('change', () => {
+                    chrome.storage.sync.get('settings')
+                        .then((latest) => {
+                            const newSettings = latest.settings || {};
+                            newSettings[checkbox.id] = checkbox.checked;
+                            return chrome.storage.sync.set({ settings: newSettings });
+                        })
                         .catch((error) => {
                             console.error(`Failed to save checkbox state for ${checkbox.id}:`, error);
                         });
@@ -50,9 +54,12 @@ window.setupSelects = () => {
                 }
 
                 select.addEventListener('change', () => {
-                    settings[select.id] = select.value;
-
-                    chrome.storage.sync.set({ settings })
+                    chrome.storage.sync.get('settings')
+                        .then((latest) => {
+                            const newSettings = latest.settings || {};
+                            newSettings[select.id] = select.value;
+                            return chrome.storage.sync.set({ settings: newSettings });
+                        })
                         .catch((error) => {
                             console.error(`Failed to save select state for ${select.id}:`, error);
                         });

@@ -266,9 +266,13 @@ const betterDescription = (info, element) => {
     });
 
     let notDone = ['language', 'genre', 'characters'];
-    const allGenres = 'AdventureAngstCrimeDramaFamilyFantasyFriendshipGeneralHorrorHumorHurt/ComfortMysteryParodyPoetryRomanceSci-FiSpiritualSupernaturalSuspenseTragedyWestern';
+    const allGenres = ['Adventure', 'Angst', 'Crime', 'Drama', 'Family', 'Fantasy', 'Friendship', 'General', 'Horror', 'Humor', 'Hurt/Comfort', 'Mystery', 'Parody', 'Poetry', 'Romance', 'Sci-Fi', 'Spiritual', 'Supernatural', 'Suspense', 'Tragedy', 'Western'];
     description.querySelectorAll(':not([class])').forEach((span) => {
-        if (notDone[0] === 'genre' && !span.innerText.split('/').every((genre) => allGenres.includes(genre))) notDone.shift();
+        // Handle "Hurt/Comfort" special case which contains the separator
+        const safeText = span.innerText.replace('Hurt/Comfort', 'Hurt_Comfort');
+        const genres = safeText.split('/').map(g => g === 'Hurt_Comfort' ? 'Hurt/Comfort' : g);
+
+        if (notDone[0] === 'genre' && !genres.every((genre) => allGenres.includes(genre))) notDone.shift();
         span.className = (notDone.shift() || 'characters') + 'meta';
     });
 
@@ -516,11 +520,19 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
                 element.parentElement.style.display = 'none';
             });
 
-            document.querySelector(`#separator${storyTexts[0].id.replace('storytext', '')}`).remove();
-            storyTexts.shift().remove();
+            // Prepare current chapter for reuse
+            const currentChapterElem = storyTexts[0];
+            const currentChapterId = Number(currentChapterElem.id.replace('storytext', ''));
+            const currentSeparator = document.querySelector(`#separator${currentChapterId}`);
+
+            // Detach current chapter from DOM to re-insert in correct order
+            currentChapterElem.remove();
+            if (currentSeparator) currentSeparator.remove();
+            storyTexts.shift(); // Remove from tracking array temporarily
 
             const finalSeparator = document.querySelector(`#separator${chapters + 1}`);
             let nextChapter = 1;
+
             const loadMore = Object.assign(document.createElement('button'), {
                 type: 'button',
                 className: 'btn pull-right',
@@ -533,38 +545,69 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
                 style: 'display:none; margin-left: 8px;'
             });
 
+            const BATCH_SIZE = 4;
+
             const loadBatch = async () => {
                 loadMore.style.display = 'none';
                 resume.style.display = 'none';
                 let added = 0;
-                for (let chapter = nextChapter; chapter <= chapters; chapter++) {
-                    try {
-                        const chapterElem = await fetchChapterWithRetry(id, chapter);
-                        chapterElem.id = `storytext${chapter}`;
 
-                        finalSeparator.before(chapterElem);
-                        storyTexts.push(chapterElem);
-                        nextChapter = chapter + 1; // resume from the next chapter if user retries
-                        added++;
+                while (nextChapter <= chapters) {
+                    const batchPromises = [];
+                    const batchIndices = [];
+                    const startChapter = nextChapter;
+
+                    // Create batch
+                    for (let i = 0; i < BATCH_SIZE && nextChapter <= chapters; i++) {
+                        batchIndices.push(nextChapter);
+                        if (nextChapter === currentChapterId) {
+                            batchPromises.push(Promise.resolve(currentChapterElem));
+                        } else {
+                            batchPromises.push(fetchChapterWithRetry(id, nextChapter));
+                        }
+                        nextChapter++;
+                    }
+
+                    try {
+                        status.textContent = `Loading chapters ${startChapter} to ${nextChapter - 1}...`;
+                        const results = await Promise.all(batchPromises);
+
+                        results.forEach((chapterElem, i) => {
+                            const chapterNum = batchIndices[i];
+                            // If it's the recycled element, it already has the id, but safe to set again
+                            chapterElem.id = `storytext${chapterNum}`;
+
+                            finalSeparator.before(chapterElem);
+                            storyTexts.push(chapterElem);
+                            added++;
+                        });
+
                     } catch (error) {
-                        console.error(`Failed to fetch chapter ${chapter}`, error);
-                        status.textContent = `Stopped at chapter ${chapter}. Click resume to retry.`;
-                        nextChapter = chapter; // retry from the same chapter on next click
+                        console.error(`Failed to fetch batch starting at ${startChapter}`, error);
+                        status.textContent = `Stopped at chapter ${startChapter}. Click resume to retry.`;
+                        nextChapter = startChapter; // Reset to start of failed batch
                         resume.style.display = '';
                         break;
                     }
+
+                    // Small delay to yield to UI thread and prevent freezing
+                    await new Promise(r => setTimeout(r, 50));
                 }
 
                 if (added > 0) {
+                    // Re-run story processing on the new elements
                     story(info, dir, id, chapters, chapSelects, storyTexts, follow, true);
                     if (storyContrast) {
                         storyContrast.click();
                         storyContrast.click();
                     }
-                    status.textContent = `Loaded through chapter ${nextChapter - 1} of ${chapters}.`;
+                    if (nextChapter > chapters) {
+                        status.textContent = `Loaded all ${chapters} chapters.`;
+                    }
                 }
 
                 if (nextChapter <= chapters && resume.style.display === 'none') {
+                    // Should technically be covered by loop, but as a fallback or for manual "Load More" usage patterns if we changed logic
                     loadMore.style.display = '';
                 }
             };
