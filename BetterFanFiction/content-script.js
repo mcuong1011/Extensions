@@ -37,6 +37,34 @@ const logError = (type, message, meta = {}) => {
         .catch((err) => console.error('Failed to write telemetry log:', err));
 };
 
+const fetchChapterWithRetry = async (id, chapter, { timeoutMs = 8000, retries = 2 } = {}) => {
+    const attempt = async (tryIndex) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(`https://www.fanfiction.net/s/${id}/${chapter}`, { signal: controller.signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const chapterHTML = await response.text();
+            const chapterElem = new DOMParser().parseFromString(chapterHTML, 'text/html').querySelector('#storytext');
+            if (!chapterElem) throw new Error('Missing #storytext in fetched chapter');
+            return chapterElem;
+        } finally {
+            clearTimeout(timeout);
+        }
+    };
+
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await attempt(i);
+        } catch (error) {
+            if (i === retries) {
+                logError('fetch-error', 'Failed to fetch chapter during Entire Work', { id, chapter, error: String(error) });
+                throw error;
+            }
+        }
+    }
+};
+
 const sendMessage = (payload) => {
     return chrome.runtime.sendMessage(payload)
         .then(response => response.result)
@@ -476,6 +504,11 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
             style: 'margin-right: 5px;'
         });
 
+        const status = Object.assign(document.createElement('div'), {
+            className: 'xcontrast_txt',
+            style: 'margin-right: 5px; font-size: 12px; text-align: right;'
+        });
+
         button.onclick = async () => {
             button.style.display = 'none';
             button.disabled = true;
@@ -493,43 +526,59 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
                 className: 'btn pull-right',
                 textContent: 'Load more chapters',
             });
+            const resume = Object.assign(document.createElement('button'), {
+                type: 'button',
+                className: 'btn pull-right',
+                textContent: 'Resume',
+                style: 'display:none; margin-left: 8px;'
+            });
 
-            loadMore.onclick = async () => {
+            const loadBatch = async () => {
                 loadMore.style.display = 'none';
+                resume.style.display = 'none';
+                let added = 0;
                 for (let chapter = nextChapter; chapter <= chapters; chapter++) {
                     try {
-                        const response = await fetch(`https://www.fanfiction.net/s/${id}/${chapter}`);
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                        }
-                        const chapterHTML = await response.text();
-                        const chapterElem = new DOMParser().parseFromString(chapterHTML, 'text/html').querySelector('#storytext');
-                        if (!chapterElem) {
-                            break;
-                        }
+                        const chapterElem = await fetchChapterWithRetry(id, chapter);
                         chapterElem.id = `storytext${chapter}`;
 
                         finalSeparator.before(chapterElem);
                         storyTexts.push(chapterElem);
                         nextChapter = chapter + 1; // resume from the next chapter if user retries
+                        added++;
                     } catch (error) {
                         console.error(`Failed to fetch chapter ${chapter}`, error);
-                        logError('fetch-error', 'Failed to fetch chapter during Entire Work', { id, chapter, error: String(error) });
+                        status.textContent = `Stopped at chapter ${chapter}. Click resume to retry.`;
                         nextChapter = chapter; // retry from the same chapter on next click
-                        loadMore.style.display = '';
+                        resume.style.display = '';
                         break;
                     }
+                }
+
+                if (added > 0) {
                     story(info, dir, id, chapters, chapSelects, storyTexts, follow, true);
                     if (storyContrast) {
                         storyContrast.click();
                         storyContrast.click();
                     }
+                    status.textContent = `Loaded through chapter ${nextChapter - 1} of ${chapters}.`;
+                }
+
+                if (nextChapter <= chapters && resume.style.display === 'none') {
+                    loadMore.style.display = '';
                 }
             };
-            finalSeparator.querySelector('hr').after(loadMore);
-            loadMore.click();
+
+            loadMore.onclick = loadBatch;
+            resume.onclick = loadBatch;
+
+            const controlsWrap = document.createElement('span');
+            controlsWrap.append(loadMore, resume);
+            finalSeparator.querySelector('hr').after(controlsWrap);
+            loadBatch();
         };
         follow.after(button);
+        follow.after(status);
 
     }
 };

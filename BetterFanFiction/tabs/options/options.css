@@ -204,6 +204,79 @@ header span:hover {
     color: #57b2fc;
 }
 
+.logs-panel {
+    margin-top: 20px;
+    padding: 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background-color: #242424;
+}
+
+.logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    color: #e5e5e5;
+    font-weight: 600;
+}
+
+.logs-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.logs-actions button {
+    background-color: #363636;
+    color: #ffffff;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.logs-actions button:hover {
+    background-color: #4a4a4a;
+}
+
+.logs-container {
+    max-height: 240px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #dcdcdc;
+}
+
+.log-entry {
+    border-bottom: 1px solid #2b2b2b;
+    padding: 6px 0;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-type {
+    color: #8ab4f8;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.log-meta {
+    color: #bbbbbb;
+}
+
+.logs-empty {
+    color: #9a9a9a;
+    margin: 0;
+}
+
 .select-label {
     margin: 10px 0;
     font-size: 15.6px;
