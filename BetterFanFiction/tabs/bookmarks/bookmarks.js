@@ -1,7 +1,7 @@
 const tableBody = document.querySelector('tbody');
 const bookmarkLinks = [];
 
-const formatDate = (addTime, dateFormat = "MM/DD/YY") => { 
+const formatDate = (addTime, dateFormat = "MM/DD/YY") => {
     if (!addTime) return '-';
 
     let d, m, y;
@@ -23,7 +23,7 @@ const formatDate = (addTime, dateFormat = "MM/DD/YY") => {
 
 function sortBookmarks(bookmarks, type, dir) {
     const cache = new Map(bookmarks.map(b => [b,
-        type === 'addTime' ? (b.addTime === '-' ? Infinity : new Date(b.addTime).getTime()) 
+        type === 'addTime' ? (b.addTime === '-' ? Infinity : new Date(b.addTime).getTime())
             : type === 'chapter' ? parseInt(b[type])
                 : b[type]
     ]));
@@ -51,29 +51,65 @@ function findStatus(bookmark) {
 
 function createBookmarkRow(bookmark) {
     const tableRow = document.createElement('tr');
-    tableRow.innerHTML = `
-        <td>${bookmark.id}</td>
-        <td><a href="https://www.fanfiction.net/s/${bookmark.id}/${bookmark.chapter}">${bookmark.storyName}</a></td>
-        <td>${bookmark.chapter}/${bookmark.chapters || '?'}</td>
-        <td>${bookmark.fandom}</td>
-        <td>${bookmark.author}</td>
-        <td class="status-cell">${findStatus(bookmark)}</td>
-        <td>${bookmark.displayDate}</td>
-        <td class="options-cell">
-            <a href="#" class="change-link">Change status</a>
-            <span class="sep"> | </span>
-            <a href="#" class="delete-link">Delete</a>
-        </td>
-    `;
 
-    const statusCell = tableRow.querySelector('.status-cell');
-    let statusValue = findStatus(bookmark);
-    statusCell.innerHTML = `<span class="status-badge ${statusValue}">${statusValue}</span>`;
+    // Create cells securely using textContent
+    const idCell = document.createElement('td');
+    idCell.textContent = bookmark.id;
+    tableRow.appendChild(idCell);
 
-    const optionsCell = tableRow.querySelector('.options-cell');
-    const deleteLink = optionsCell.querySelector('.delete-link');
-    const changeLink = optionsCell.querySelector('.change-link');
-    const sep = optionsCell.querySelector('.sep');
+    const titleCell = document.createElement('td');
+    const titleLink = document.createElement('a');
+    titleLink.href = `https://www.fanfiction.net/s/${bookmark.id}/${bookmark.chapter}`;
+    titleLink.textContent = bookmark.storyName;
+    titleCell.appendChild(titleLink);
+    tableRow.appendChild(titleCell);
+
+    const chapterCell = document.createElement('td');
+    chapterCell.textContent = `${bookmark.chapter}/${bookmark.chapters || '?'}`;
+    tableRow.appendChild(chapterCell);
+
+    const fandomCell = document.createElement('td');
+    fandomCell.textContent = bookmark.fandom;
+    tableRow.appendChild(fandomCell);
+
+    const authorCell = document.createElement('td');
+    authorCell.textContent = bookmark.author;
+    tableRow.appendChild(authorCell);
+
+    const statusCell = document.createElement('td');
+    statusCell.className = 'status-cell';
+    const statusValue = findStatus(bookmark);
+    const statusBadge = document.createElement('span');
+    statusBadge.className = `status-badge ${statusValue}`;
+    statusBadge.textContent = statusValue;
+    statusCell.appendChild(statusBadge);
+    tableRow.appendChild(statusCell);
+
+    const dateCell = document.createElement('td');
+    dateCell.textContent = bookmark.displayDate;
+    tableRow.appendChild(dateCell);
+
+    const optionsCell = document.createElement('td');
+    optionsCell.className = 'options-cell';
+
+    const changeLink = document.createElement('a');
+    changeLink.href = '#';
+    changeLink.className = 'change-link';
+    changeLink.textContent = 'Change status';
+    optionsCell.appendChild(changeLink);
+
+    const sep = document.createElement('span');
+    sep.className = 'sep';
+    sep.textContent = ' | ';
+    optionsCell.appendChild(sep);
+
+    const deleteLink = document.createElement('a');
+    deleteLink.href = '#';
+    deleteLink.className = 'delete-link';
+    deleteLink.textContent = 'Delete';
+    optionsCell.appendChild(deleteLink);
+
+    tableRow.appendChild(optionsCell);
 
     deleteLink.addEventListener('click', (e) => {
         e.preventDefault();
@@ -124,9 +160,9 @@ let settings;
 chrome.storage.sync.get().then((result) => {
     settings = result.settings;
 })
-.catch((error) => {
-    console.error('Failed to load settings from sync storage:', error);
-});
+    .catch((error) => {
+        console.error('Failed to load settings from sync storage:', error);
+    });
 
 // Normalize and load bookmarks
 chrome.storage.local.get().then((result) => {
@@ -317,9 +353,14 @@ chrome.storage.sync.get('settings')
         const tbody = document.querySelector('table tbody');
         if (tbody) {
             const mo = new MutationObserver(() => {
-                requestAnimationFrame(hideOrganizerUI);
+                requestAnimationFrame(hideOrganizerUI); // Use RAF for smoother UI updates
             });
             mo.observe(tbody, { childList: true, subtree: true });
+
+            // Disconnect observer when page is unloaded to prevent memory leaks
+            window.addEventListener('beforeunload', () => {
+                mo.disconnect();
+            });
         }
 
         document.querySelectorAll('th[data-sort-type]').forEach(th => {

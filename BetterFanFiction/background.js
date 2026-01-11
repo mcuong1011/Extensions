@@ -94,16 +94,23 @@ chrome.runtime.onInstalled.addListener((details) => {
         });
 
     chrome.storage.local.get()
-        .then((result) => Object.keys(result).forEach(id => {
-            const addTime = result[id]?.addTime;
-            if (typeof addTime === 'string' && addTime.includes('/')) {
-                const [d, m, y] = addTime.split('/');
-                const parsed = new Date(`${m}/${d}/${y}`);
-                if (!Number.isNaN(parsed.getTime())) {
-                    result[id].addTime = parsed.toISOString();
+        .then((result) => {
+            let modified = false;
+            Object.keys(result).forEach(id => {
+                const addTime = result[id]?.addTime;
+                if (typeof addTime === 'string' && addTime.includes('/')) {
+                    const [d, m, y] = addTime.split('/');
+                    const parsed = new Date(`${m}/${d}/${y}`);
+                    if (!Number.isNaN(parsed.getTime())) {
+                        result[id].addTime = parsed.toISOString();
+                        modified = true;
+                    }
                 }
+            });
+            if (modified) {
+                return chrome.storage.local.set(result);
             }
-        }))
+        })
         .catch((error) => {
             console.error('Failed to overwrite legacy date storage during installation:', error);
             logError('storage-error', 'Failed to migrate legacy date storage', { error: String(error) });

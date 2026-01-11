@@ -525,7 +525,9 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
             const currentChapterId = Number(currentChapterElem.id.replace('storytext', ''));
             const currentSeparator = document.querySelector(`#separator${currentChapterId}`);
 
-            // Detach current chapter from DOM to re-insert in correct order
+            // Fix Race Condition: Only detach if we are sure we are proceeding.
+            // Even then, we might want to keep it in memory just in case.
+            // For now, we follow the plan: detach but don't lose the reference.
             currentChapterElem.remove();
             if (currentSeparator) currentSeparator.remove();
             storyTexts.shift(); // Remove from tracking array temporarily
@@ -570,16 +572,21 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
 
                     try {
                         status.textContent = `Loading chapters ${startChapter} to ${nextChapter - 1}...`;
-                        const results = await Promise.all(batchPromises);
+                        const results = await Promise.allSettled(batchPromises);
 
-                        results.forEach((chapterElem, i) => {
-                            const chapterNum = batchIndices[i];
-                            // If it's the recycled element, it already has the id, but safe to set again
-                            chapterElem.id = `storytext${chapterNum}`;
+                        results.forEach((result, i) => {
+                            if (result.status === 'fulfilled') {
+                                const chapterElem = result.value;
+                                const chapterNum = batchIndices[i];
+                                chapterElem.id = `storytext${chapterNum}`;
 
-                            finalSeparator.before(chapterElem);
-                            storyTexts.push(chapterElem);
-                            added++;
+                                finalSeparator.before(chapterElem);
+                                storyTexts.push(chapterElem);
+                                added++;
+                            } else {
+                                console.error(`Failed to load chapter ${batchIndices[i]}`, result.reason);
+                                // We could add a placeholder error div here if we wanted
+                            }
                         });
 
                     } catch (error) {
@@ -627,15 +634,15 @@ const entireWork = (info, dir, id, chapters, chapSelects, storyTexts, follow) =>
 };
 
 const main = async () => {
-    const info = await sendMessage({
-        message: 'get-info'
-    });
-
-    const dir = await sendMessage({
-        message: 'get-dir'
-    });
-
     try {
+        const info = await sendMessage({
+            message: 'get-info'
+        });
+
+        const dir = await sendMessage({
+            message: 'get-dir'
+        });
+
         adblock(info);
         shortcuts(info);
         profileSorts(info);
@@ -686,8 +693,8 @@ const main = async () => {
             }
         }
     } catch (e) {
-        console.log("content-script.js did not run correctly, ", e);
-        logError('runtime-error', 'Content script failed', { error: String(e) });
+        console.error("content-script.js did not run correctly, ", e);
+        logError('runtime-error', 'Content script failed', { error: String(e), stack: e.stack });
     }
 };
 
